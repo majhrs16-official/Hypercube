@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperCube 4D - Interactive Tesseract Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: #0a0a0f; 
+            color: #e0e0e0; 
+            font-family: 'Monospace', monospace; 
+            overflow: hidden; 
+            height: 100vh; 
+        }
+        #canvas-container { width: 100%; height: 100%; position: relative; }
+        canvas { display: block; }
+        #ui {
+            position: absolute; top: 20px; left: 20px; z-index: 100;
+            background: rgba(10,10,15,0.9); border: 1px solid #333;
+            border-radius: 8px; padding: 16px; min-width: 280px;
+            backdrop-filter: blur(10px);
+        }
+        #ui h1 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #00d4aa; letter-spacing: 1px; }
+        .control-group { margin-bottom: 16px; }
+        .control-group label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; }
+        .control-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+        input[type="range"] { flex: 1; accent-color: #00d4aa; }
+        .value { font-size: 12px; color: #00d4aa; min-width: 45px; text-align: right; font-variant-numeric: tabular-nums; }
+        button { 
+            background: #1a1a2e; border: 1px solid #333; color: #e0e0e0;
+            padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 11px;
+            transition: all 0.2s; font-family: inherit;
+        }
+        button:hover { background: #00d4aa; color: #0a0a0f; border-color: #00d4aa; }
+        button:active { transform: scale(0.98); }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        #info {
+            position: absolute; bottom: 20px; right: 20px; z-index: 100;
+            background: rgba(10,10,15,0.85); border: 1px solid #222;
+            border-radius: 8px; padding: 12px 16px; font-size: 11px; color: #888;
+            max-width: 300px; line-height: 1.6;
+        }
+        #info strong { color: #00d4aa; }
+        .cell-legend {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 12px; font-size: 10px;
+        }
+        .cell-item { display: flex; align-items: center; gap: 6px; padding: 4px; border-radius: 3px; }
+        .cell-color { width: 12px; height: 12px; border-radius: 2px; border: 1px solid #333; }
+        .cell-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cell-axes { color: #666; font-size: 9px; }
+        @media (max-width: 768px) {
+            #ui { top: 10px; left: 10px; right: 10px; min-width: auto; }
+            #info { bottom: 10px; right: 10px; left: 10px; max-width: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="ui">
+        <h1>HYPERCUBE 4D</h1>
+        <div class="control-group">
+            <label>Projection</label>
+            <div class="control-row">
+                <span>Distance</span>
+                <input type="range" id="projDist" min="2" max="10" step="0.1" value="4">
+                <span class="value" id="projDistVal">4.0</span>
+            </div>
+            <div class="control-row">
+                <span>FOV</span>
+                <input type="range" id="fov" min="30" max="120" step="1" value="75">
+                <span class="value" id="fovVal">75°</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Rotation (4D)</label>
+            <div class="control-row">
+                <span>XY</span>
+                <input type="range" id="rotXY" min="-3.14" max="3.14" step="0.01" value="0">
+                <span class="value" id="rotXYVal">0.00</span>
+            </div>
+            <div class="control-row">
+                <span>ZW</span>
+                <input type="range" id="rotZW" min="-3.14" max="3.14" step="0.01" value="0.5">
+                <span class="value" id="rotZWVal">0.50</span>
+            </div>
+            <div class="control-row">
+                <span>XZ</span>
+                <input type="range" id="rotXZ" min="-3.14" max="3.14" step="0.01" value="0">
+                <span class="value" id="rotXZVal">0.00</span>
+            </div>
+            <div class="control-row">
+                <span>YW</span>
+                <input type="range" id="rotYW" min="-3.14" max="3.14" step="0.01" value="0.3">
+                <span class="value" id="rotYWVal">0.30</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Animation</label>
+            <div class="btn-grid">
+                <button id="autoRot">Auto Rotate: ON</button>
+                <button id="resetView">Reset View</button>
+            </div>
+            <div class="control-row" style="margin-top: 8px;">
+                <span>Speed</span>
+                <input type="range" id="rotSpeed" min="0" max="2" step="0.01" value="0.5">
+                <span class="value" id="rotSpeedVal">0.50</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Render</label>
+            <div class="btn-grid">
+                <button id="wireframe">Wireframe: OFF</button>
+                <button id="showCells">Cells: ON</button>
+            </div>
+            <div class="control-row" style="margin-top: 8px;">
+                <span>Opacity</span>
+                <input type="range" id="cellOpacity" min="0.1" max="1" step="0.05" value="0.35">
+                <span class="value" id="cellOpacityVal">0.35</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Camera 3D Position</label>
+            <div class="control-row">
+                <span>X</span>
+                <span class="value" id="camX">0.00</span>
+            </div>
+            <div class="control-row">
+                <span>Y</span>
+                <span class="value" id="camY">0.00</span>
+            </div>
+            <div class="control-row">
+                <span>Z</span>
+                <span class="value" id="camZ">10.00</span>
+            </div>
+            <div class="control-row">
+                <span>Radius</span>
+                <span class="value" id="camR">10.00</span>
+            </div>
+        </div>
+        <div class="cell-legend" id="cellLegend"></div>
+    </div>
+    <div id="info">
+        <strong>Controls:</strong> Drag / 1-finger: rotate 3D view. Shift+Drag / 2-finger drag: rotate 4D (XW/YW planes).<br>
+        Scroll / Pinch: zoom projection distance. Each colored cell is a 3D cube face of the 4D tesseract.<br>
+        <strong>Cells:</strong> 8 cubic cells × 8 vertices = 64 vertices in 4D, projected to 3D frustums.
+    </div>
+    <script src="three.min.js"></script>
+    <script>
+// ============================================================
+// CLIFFORD ALGEBRA / 4D ROTORS (Geometric Algebra in 4D)
+// ============================================================
+// Rotor in 4D: 1 scalar + 6 bivectors (XY, XZ, XW, YZ, YW, ZW)
+// Double cover of SO(4) ≈ SU(2) × SU(2)
+class Rotor4D {
+    constructor(s = 1, xy = 0, xz = 0, xw = 0, yz = 0, yw = 0, zw = 0) {
+        this.s = s; this.xy = xy; this.xz = xz; this.xw = xw;
+        this.yz = yz; this.yw = yw; this.zw = zw;
+    }
+    static identity() { return new Rotor4D(); }
+    static fromPlaneAngle(plane, angle) {
+        const half = angle * 0.5;
+        const s = Math.cos(half);
+        const b = Math.sin(half);
+        const r = new Rotor4D(s);
+        switch (plane) {
+            case 'xy': r.xy = b; break;
+            case 'xz': r.xz = b; break;
+            case 'xw': r.xw = b; break;
+            case 'yz': r.yz = b; break;
+            case 'yw': r.yw = b; break;
+            case 'zw': r.zw = b; break;
+        }
+        return r.normalize();
+    }
+    static fromAngles(angles) {
+        let r = Rotor4D.identity();
+        if (angles.xy) r = r.mul(Rotor4D.fromPlaneAngle('xy', angles.xy));
+        if (angles.xz) r = r.mul(Rotor4D.fromPlaneAngle('xz', angles.xz));
+        if (angles.xw) r = r.mul(Rotor4D.fromPlaneAngle('xw', angles.xw));
+        if (angles.yz) r = r.mul(Rotor4D.fromPlaneAngle('yz', angles.yz));
+        if (angles.yw) r = r.mul(Rotor4D.fromPlaneAngle('yw', angles.yw));
+        if (angles.zw) r = r.mul(Rotor4D.fromPlaneAngle('zw', angles.zw));
+        return r.normalize();
+    }
+    normalize() {
+        const norm = Math.sqrt(this.s*this.s + this.xy*this.xy + this.xz*this.xz + this.xw*this.xw +
+                               this.yz*this.yz + this.yw*this.yw + this.zw*this.zw);
+        if (norm > 0) { this.s/=norm; this.xy/=norm; this.xz/=norm; this.xw/=norm; this.yz/=norm; this.yw/=norm; this.zw/=norm; }
+        return this;
+    }
+    mul(other) {
+        const a = this, b = other;
+        return new Rotor4D(
+            a.s*b.s - a.xy*b.xy - a.xz*b.xz - a.xw*b.xw - a.yz*b.yz - a.yw*b.yw - a.zw*b.zw,
+            a.s*b.xy + a.xy*b.s + a.xz*b.yz - a.xw*b.yw - a.yz*b.xz + a.yw*b.xw + a.zw*b.zw,
+            a.s*b.xz - a.xy*b.yz + a.xz*b.s + a.xw*b.zw + a.yz*b.xy - a.yw*b.zw - a.zw*b.yw,
+            a.s*b.xw + a.xy*b.yw - a.xz*b.zw + a.xw*b.s - a.yz*b.zw + a.yw*b.xy + a.zw*b.xz,
+            a.s*b.yz + a.xy*b.xz - a.xz*b.xy + a.xw*b.zw + a.yz*b.s - a.yw*b.xw - a.zw*b.xw,
+            a.s*b.yw - a.xy*b.xw + a.xz*b.zw - a.xw*b.xy + a.yz*b.xw + a.yw*b.s + a.zw*b.xy,
+            a.s*b.zw + a.xy*b.zw - a.xz*b.yw + a.xw*b.xz + a.yz*b.xw - a.yw*b.xz + a.zw*b.s
+        ).normalize();
+    }
+    reverse() { return new Rotor4D(this.s, -this.xy, -this.xz, -this.xw, -this.yz, -this.yw, -this.zw); }
+    rotateVector(v) {
+        // v as pure rotor (0, xy, xz, xw, yz, yw, zw) where v = (x,y,z,w)
+        // Result: R * v * R~
+        const x = v.x, y = v.y, z = v.z, w = v.w;
+        // Build vector as bivector representation is complex; use sandwich directly:
+        // For 4D rotation, we can use the fact that rotor acts on each plane
+        // Simplified: apply rotation in each plane independently
+        // This is equivalent for simple rotors (single plane), for compound we use full sandwich
+        // Full sandwich product for 4D vector:
+        // v' = R * v * R~ where v = x*e1 + y*e2 + z*e3 + w*e4
+        // Using GA sandwich: v' = R v R†
+        // We'll compute via plane rotations composition (correct for orthogonal planes)
+        let vx = x, vy = y, vz = z, vw = w;
+        // Apply each bivector component as plane rotation
+        if (this.xy !== 0 || this.s !== 1) { // XY plane
+            const c = this.s, s = this.xy;
+            [vx, vy] = [c*vx - s*vy, s*vx + c*vy];
+        }
+        if (this.zw !== 0) { const c = this.s, s = this.zw; [vz, vw] = [c*vz - s*vw, s*vz + c*vw]; }
+        if (this.xz !== 0) { const c = this.s, s = this.xz; [vx, vz] = [c*vx - s*vz, s*vx + c*vz]; }
+        if (this.yw !== 0) { const c = this.s, s = this.yw; [vy, vw] = [c*vy - s*vw, s*vy + c*vw]; }
+        if (this.xw !== 0) { const c = this.s, s = this.xw; [vx, vw] = [c*vx - s*vw, s*vx + c*vw]; }
+        if (this.yz !== 0) { const c = this.s, s = this.yz; [vy, vz] = [c*vy - s*vz, s*vy + c*vz]; }
+        return { x: vx, y: vy, z: vz, w: vw };
+    }
+    clone() { return new Rotor4D(this.s, this.xy, this.xz, this.xw, this.yz, this.yw, this.zw); }
+    slerp(target, t) {
+        // Simple linear interpolation of angles for UI
+        return this;
+    }
+}
+
+// 4D Vector
+class Vec4 {
+    constructor(x=0, y=0, z=0, w=0) { this.x=x; this.y=y; this.z=z; this.w=w; }
+    static fromArray(a) { return new Vec4(a[0],a[1],a[2],a[3]); }
+    toArray() { return [this.x,this.y,this.z,this.w]; }
+    add(other) { return new Vec4(this.x+other.x, this.y+other.y, this.z+other.z, this.w+other.w); }
+    sub(other) { return new Vec4(this.x-other.x, this.y-other.y, this.z-other.z, this.w-other.w); }
+    mul(s) { return new Vec4(this.x*s, this.y*s, this.z*s, this.w*s); }
+    dot(other) { return this.x*other.x + this.y*other.y + this.z*other.z + this.w*other.w; }
+    norm() { return Math.sqrt(this.dot(this)); }
+    normalize() { const n=this.norm(); return n>0?this.mul(1/n):new Vec4(); }
+    clone() { return new Vec4(this.x,this.y,this.z,this.w); }
+    applyRotor(r) { return new Vec4(...Object.values(r.rotateVector(this))); }
+}
+
+// ============================================================
+// TESSERACT GEOMETRY - 8 CELLS (3D CUBES IN 4D)
+// ============================================================
+// Tesseract vertices: (±1, ±1, ±1, ±1) = 16 vertices
+// 8 Cells (cubic facets): each fixes one coordinate to ±1
+const CELL_DEFS = [
+    { name: 'Cell +X', fix: 'x', val: 1, color: 0xff4444, axes: 'Y,Z,W' },
+    { name: 'Cell -X', fix: 'x', val: -1, color: 0xff8844, axes: 'Y,Z,W' },
+    { name: 'Cell +Y', fix: 'y', val: 1, color: 0x44ff44, axes: 'X,Z,W' },
+    { name: 'Cell -Y', fix: 'y', val: -1, color: 0x44ff88, axes: 'X,Z,W' },
+    { name: 'Cell +Z', fix: 'z', val: 1, color: 0x4444ff, axes: 'X,Y,W' },
+    { name: 'Cell -Z', fix: 'z', val: -1, color: 0x8844ff, axes: 'X,Y,W' },
+    { name: 'Cell +W', fix: 'w', val: 1, color: 0xff44ff, axes: 'X,Y,Z' },
+    { name: 'Cell -W', fix: 'w', val: -1, color: 0xff4488, axes: 'X,Y,Z' },
+];
+
+// Generate 8 vertices for a cell (3D cube in 4D)
+function generateCellVertices(fixAxis, fixVal) {
+    const verts = [];
+    const axes = ['x','y','z','w'].filter(a => a !== fixAxis);
+    for (let i = 0; i < 8; i++) {
+        const v = { x:0, y:0, z:0, w:0 };
+        v[fixAxis] = fixVal;
+        v[axes[0]] = (i & 1) ? 1 : -1;
+        v[axes[1]] = (i & 2) ? 1 : -1;
+        v[axes[2]] = (i & 4) ? 1 : -1;
+        verts.push(new Vec4(v.x, v.y, v.z, v.w));
+    }
+    return verts;
+}
+
+// Cell edges (12 edges of a cube)
+const CELL_EDGES = [
+    [0,1],[1,3],[3,2],[2,0], // face 1
+    [4,5],[5,7],[7,6],[6,4], // face 2
+    [0,4],[1,5],[2,6],[3,7]  // connecting edges
+];
+
+// Cell faces (6 faces of a cube) - for rendering
+const CELL_FACES = [
+    [0,1,3,2], [4,5,7,6], [0,1,5,4], [2,3,7,6], [0,2,6,4], [1,3,7,5]
+];
+
+// Pre-generate all cell vertices
+const ALL_CELL_VERTS = CELL_DEFS.map(d => generateCellVertices(d.fix, d.val));
+
+// ============================================================
+// 4D → 3D PERSPECTIVE PROJECTION
+// ============================================================
+function project4Dto3D(v4, projDist = 4) {
+    // Perspective projection: (x,y,z,w) -> (x,y,z) * projDist / (projDist - w)
+    // Camera at (0,0,0,projDist) looking at origin
+    const denom = projDist - v4.w;
+    if (Math.abs(denom) < 0.001) return new THREE.Vector3(0,0,0);
+    const scale = projDist / denom;
+    return new THREE.Vector3(v4.x * scale, v4.y * scale, v4.z * scale);
+}
+
+// 4D clipping: determine if a 4D face is visible (w < projDist)
+function isFaceVisible(faceVerts4D, projDist) {
+    return faceVerts4D.every(v => v.w < projDist - 0.01);
+}
+
+// ============================================================
+// GLOBAL ROTOR STATE
+// ============================================================
+const state = {
+    rotor: Rotor4D.identity(),
+    projDist: 4,
+    fov: 75,
+    autoRotate: true,
+    rotSpeed: 0.5,
+    wireframe: false,
+    showCells: true,
+    cellOpacity: 0.35,
+    autoRotAngles: { xy: 0, zw: 0.5, xz: 0, yw: 0.3 },
+    targetAngles: { xy: 0, zw: 0.5, xz: 0, yw: 0.3 },
+    isDragging: false,
+    dragStart: { x:0, y:0 },
+    dragType: '3d', // '3d' or '4d'
+    camera3D: { theta: 0.5, phi: 0.5, radius: 10 }
+};
+
+// Update rotor from target angles
+function updateRotorFromAngles() {
+    state.rotor = Rotor4D.fromAngles(state.targetAngles);
+}
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+let scene, camera, renderer, composer;
+const cellMeshes = [];
+const cellEdgesMeshes = [];
+const cellLabels = [];
+
+// Initialize Three.js
+function initThree() {
+    const container = document.getElementById('canvas-container');
+    
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a0f);
+
+    camera = new THREE.PerspectiveCamera(state.fov, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 10);
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0x444466, 0.5);
+    scene.add(ambient);
+    
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(5, 10, 7);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+    
+    const dirLight2 = new THREE.DirectionalLight(0x00d4aa, 0.5);
+    dirLight2.position.set(-5, -5, -5);
+    scene.add(dirLight2);
+
+    // Create cell meshes
+    createCellMeshes();
+    createLegend();
+
+    // Events
+    window.addEventListener('resize', onResize);
+    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    
+    // Touch listeners (need renderer.domElement to exist)
+    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+    renderer.domElement.addEventListener('touchend', onTouchEnd);
+    
+    setupUI();
+}
+
+function createCellMeshes() {
+    CELL_DEFS.forEach((def, idx) => {
+        const verts4D = ALL_CELL_VERTS[idx];
+        
+        // Initial projection to 3D for geometry creation
+        const initialProjected = verts4D.map(v => project4Dto3D(v, state.projDist));
+        const initialPositions3D = new Float32Array(initialProjected.length * 3);
+        initialProjected.forEach((v, i) => {
+            initialPositions3D[i*3] = v.x;
+            initialPositions3D[i*3+1] = v.y;
+            initialPositions3D[i*3+2] = v.z;
+        });
+        
+        // Faces mesh (solid)
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(initialPositions3D, 3));
+        geometry.setAttribute('position4d', new THREE.Float32BufferAttribute(
+            verts4D.flatMap(v => [v.x, v.y, v.z, v.w]), 4
+        ));
+        geometry.setIndex(CELL_FACES.flat());
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        
+        const material = new THREE.MeshStandardMaterial({
+            color: def.color,
+            transparent: true,
+            opacity: state.cellOpacity,
+            side: THREE.DoubleSide,
+            metalness: 0.3,
+            roughness: 0.7,
+            depthWrite: false
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.userData = { cellIndex: idx, isCell: true };
+        cellMeshes.push(mesh);
+        scene.add(mesh);
+
+        // Edges mesh (wireframe)
+        const edgesGeom = new THREE.BufferGeometry();
+        edgesGeom.setAttribute('position', new THREE.Float32BufferAttribute(initialPositions3D, 3));
+        edgesGeom.setAttribute('position4d', new THREE.Float32BufferAttribute(
+            verts4D.flatMap(v => [v.x, v.y, v.z, v.w]), 4
+        ));
+        edgesGeom.setIndex(CELL_EDGES.flat());
+        edgesGeom.computeBoundingSphere();
+        const edgesMat = new THREE.LineBasicMaterial({ 
+            color: def.color, 
+            transparent: true, 
+            opacity: 0.8,
+            linewidth: 2
+        });
+        const edgesMesh = new THREE.LineSegments(edgesGeom, edgesMat);
+        edgesMesh.userData = { cellIndex: idx };
+        cellEdgesMeshes.push(edgesMesh);
+        scene.add(edgesMesh);
+    });
+    
+    // Add a reference grid for debugging
+    const gridHelper = new THREE.GridHelper(10, 10, 0x00d4aa, 0x333333);
+    gridHelper.position.y = -3;
+    scene.add(gridHelper);
+    
+    // Add axis helper
+    const axesHelper = new THREE.AxesHelper(5);
+    scene.add(axesHelper);
+}
+
+function createLegend() {
+    const legend = document.getElementById('cellLegend');
+    CELL_DEFS.forEach((def, i) => {
+        const div = document.createElement('div');
+        div.className = 'cell-item';
+        div.innerHTML = `
+            <div class="cell-color" style="background: #${def.color.toString(16).padStart(6,'0')}"></div>
+            <span class="cell-name">${def.name}</span>
+            <span class="cell-axes">${def.axes}</span>
+        `;
+        legend.appendChild(div);
+    });
+}
+
+// ============================================================
+// RENDER LOOP - PROJECT 4D TO 3D EACH FRAME
+// ============================================================
+function updateCells() {
+    CELL_DEFS.forEach((def, idx) => {
+        const mesh = cellMeshes[idx];
+        const edgesMesh = cellEdgesMeshes[idx];
+        const verts4D = ALL_CELL_VERTS[idx];
+        
+        // Apply 4D rotor to all vertices
+        const rotated = verts4D.map(v => v.applyRotor(state.rotor));
+        
+        // Project to 3D
+        const projected = rotated.map(v => project4Dto3D(v, state.projDist));
+        
+        // Update geometry positions
+        const positions3D = new Float32Array(projected.length * 3);
+        projected.forEach((v, i) => {
+            positions3D[i*3] = v.x;
+            positions3D[i*3+1] = v.y;
+            positions3D[i*3+2] = v.z;
+        });
+        mesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions3D, 3));
+        edgesMesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions3D, 3));
+        mesh.geometry.computeVertexNormals();
+        mesh.geometry.computeBoundingSphere();
+        edgesMesh.geometry.computeBoundingSphere();
+        
+        // Visibility
+        mesh.visible = state.showCells && !state.wireframe;
+        edgesMesh.visible = state.wireframe || !state.showCells;
+        mesh.material.opacity = state.cellOpacity;
+    });
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    
+    if (state.autoRotate) {
+        state.targetAngles.xy += 0.001 * state.rotSpeed;
+        state.targetAngles.zw += 0.0015 * state.rotSpeed;
+        state.targetAngles.xz += 0.0005 * state.rotSpeed;
+        state.targetAngles.yw += 0.0008 * state.rotSpeed;
+        updateRotorFromAngles();
+        updateSliders();
+    }
+    
+    updateCells();
+    updateCamera();
+    renderer.render(scene, camera);
+}
+
+function updateCamera() {
+    // Orbit camera around 3D origin
+    const { theta, phi, radius } = state.camera3D;
+    camera.position.x = radius * Math.sin(phi) * Math.cos(theta);
+    camera.position.y = radius * Math.cos(phi);
+    camera.position.z = radius * Math.sin(phi) * Math.sin(theta);
+    camera.lookAt(0, 0, 0);
+    camera.fov = state.fov;
+    camera.updateProjectionMatrix();
+    
+    // Update camera position display
+    document.getElementById('camX').textContent = camera.position.x.toFixed(2);
+    document.getElementById('camY').textContent = camera.position.y.toFixed(2);
+    document.getElementById('camZ').textContent = camera.position.z.toFixed(2);
+    document.getElementById('camR').textContent = radius.toFixed(2);
+}
+
+// ============================================================
+// INTERACTION HANDLERS
+// ============================================================
+function onMouseDown(e) {
+    state.isDragging = true;
+    state.dragStart = { x: e.clientX, y: e.clientY };
+    state.dragType = e.shiftKey ? '4d' : '3d';
+    renderer.domElement.style.cursor = state.dragType === '4d' ? 'grabbing' : 'grab';
+}
+
+function onMouseMove(e) {
+    if (!state.isDragging) return;
+    const dx = e.clientX - state.dragStart.x;
+    const dy = e.clientY - state.dragStart.y;
+    state.dragStart = { x: e.clientX, y: e.clientY };
+    
+    if (state.dragType === '3d') {
+        state.camera3D.theta -= dx * 0.005;
+        state.camera3D.phi = Math.max(0.1, Math.min(Math.PI - 0.1, state.camera3D.phi - dy * 0.005));
+    } else {
+        // 4D rotation: map drag to XW and YW planes
+        state.targetAngles.xw -= dy * 0.005;
+        state.targetAngles.yw += dx * 0.005;
+        updateRotorFromAngles();
+        updateSliders();
+    }
+}
+
+function onMouseUp() {
+    state.isDragging = false;
+    renderer.domElement.style.cursor = 'default';
+}
+
+function onWheel(e) {
+    e.preventDefault();
+    state.projDist = Math.max(2, Math.min(10, state.projDist + e.deltaY * 0.005));
+    document.getElementById('projDist').value = state.projDist;
+    document.getElementById('projDistVal').textContent = state.projDist.toFixed(1);
+}
+
+function onResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ============================================================
+// TOUCH SUPPORT (Mobile)
+// ============================================================
+function onTouchStart(e) {
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        state.isDragging = true;
+        state.dragStart = { x: touch.clientX, y: touch.clientY };
+        state.dragType = '3d'; // Single finger = 3D orbit
+        e.preventDefault();
+    } else if (e.touches.length === 2) {
+        // Two fingers = 4D rotation (pinch to rotate XW/YW)
+        state.isDragging = true;
+        state.dragStart = { 
+            x: (e.touches[0].clientX + e.touches[1].clientX) * 0.5,
+            y: (e.touches[0].clientY + e.touches[1].clientY) * 0.5 
+        };
+        state.dragType = '4d';
+        state.initialPinchDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        e.preventDefault();
+    }
+}
+
+function onTouchMove(e) {
+    if (!state.isDragging || !e.touches.length) return;
+    
+    if (state.dragType === '3d' && e.touches.length === 1) {
+        const touch = e.touches[0];
+        const dx = touch.clientX - state.dragStart.x;
+        const dy = touch.clientY - state.dragStart.y;
+        state.dragStart = { x: touch.clientX, y: touch.clientY };
+        state.camera3D.theta -= dx * 0.005;
+        state.camera3D.phi = Math.max(0.1, Math.min(Math.PI - 0.1, state.camera3D.phi - dy * 0.005));
+        e.preventDefault();
+    } else if (state.dragType === '4d' && e.touches.length === 2) {
+        // Two finger drag = rotate 4D
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) * 0.5;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) * 0.5;
+        const dx = cx - state.dragStart.x;
+        const dy = cy - state.dragStart.y;
+        state.dragStart = { x: cx, y: cy };
+        state.targetAngles.xw -= dy * 0.005;
+        state.targetAngles.yw += dx * 0.005;
+        updateRotorFromAngles();
+        updateSliders();
+        e.preventDefault();
+    }
+}
+
+function onTouchEnd(e) {
+    state.isDragging = false;
+    state.dragType = '3d';
+}
+
+// Add touch listeners
+
+// ============================================================
+// UI CONTROLS
+// ============================================================
+function setupUI() {
+    const bind = (id, valKey, transform = v => v, update = () => {}) => {
+        const el = document.getElementById(id);
+        const valEl = document.getElementById(id + 'Val');
+        if (!el) return;
+        el.addEventListener('input', () => {
+            const v = transform(parseFloat(el.value));
+            if (valKey.includes('.')) {
+                const [obj, key] = valKey.split('.');
+                state[obj][key] = v;
+            } else {
+                state[valKey] = v;
+            }
+            if (valEl) valEl.textContent = typeof v === 'number' ? v.toFixed(2) : v;
+            update();
+        });
+    };
+    
+    bind('projDist', 'projDist', v => v, () => {});
+    bind('fov', 'fov', v => v, () => { camera.fov = v; camera.updateProjectionMatrix(); });
+    bind('rotXY', 'targetAngles.xy', v => v, () => { updateRotorFromAngles(); });
+    bind('rotZW', 'targetAngles.zw', v => v, () => { updateRotorFromAngles(); });
+    bind('rotXZ', 'targetAngles.xz', v => v, () => { updateRotorFromAngles(); });
+    bind('rotYW', 'targetAngles.yw', v => v, () => { updateRotorFromAngles(); });
+    bind('rotSpeed', 'rotSpeed', v => v, () => {});
+    bind('cellOpacity', 'cellOpacity', v => v, () => { cellMeshes.forEach(m => m.material.opacity = v); });
+    
+    document.getElementById('autoRot').addEventListener('click', (e) => {
+        state.autoRotate = !state.autoRotate;
+        e.target.textContent = 'Auto Rotate: ' + (state.autoRotate ? 'ON' : 'OFF');
+    });
+    
+    document.getElementById('resetView').addEventListener('click', () => {
+        state.targetAngles = { xy: 0, zw: 0.5, xz: 0, yw: 0.3 };
+        state.camera3D = { theta: 0.5, phi: 0.5, radius: 10 };
+        state.projDist = 4;
+        updateRotorFromAngles();
+        updateSliders();
+        document.getElementById('projDist').value = 4;
+        document.getElementById('projDistVal').textContent = '4.0';
+    });
+    
+    document.getElementById('wireframe').addEventListener('click', (e) => {
+        state.wireframe = !state.wireframe;
+        e.target.textContent = 'Wireframe: ' + (state.wireframe ? 'ON' : 'OFF');
+    });
+    
+    document.getElementById('showCells').addEventListener('click', (e) => {
+        state.showCells = !state.showCells;
+        e.target.textContent = 'Cells: ' + (state.showCells ? 'ON' : 'OFF');
+    });
+}
+
+function updateSliders() {
+    document.getElementById('rotXY').value = state.targetAngles.xy;
+    document.getElementById('rotXYVal').textContent = state.targetAngles.xy.toFixed(2);
+    document.getElementById('rotZW').value = state.targetAngles.zw;
+    document.getElementById('rotZWVal').textContent = state.targetAngles.zw.toFixed(2);
+    document.getElementById('rotXZ').value = state.targetAngles.xz;
+    document.getElementById('rotXZVal').textContent = state.targetAngles.xz.toFixed(2);
+    document.getElementById('rotYW').value = state.targetAngles.yw;
+    document.getElementById('rotYWVal').textContent = state.targetAngles.yw.toFixed(2);
+}
+
+// ============================================================
+// START
+// ============================================================
+initThree();
+animate();
+    </script>
+</body>
+</html>
